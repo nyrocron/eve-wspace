@@ -12,7 +12,7 @@
 #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from django.contrib.auth.models import Group
 from core.models import SystemData
@@ -394,6 +394,7 @@ class MapSystem(models.Model):
     interesttime = models.DateTimeField(null=True, blank=True)
     parentsystem = models.ForeignKey('self', related_name="childsystems",
                                      null=True, blank=True)
+    display_order_priority = models.IntegerField(default=0)
 
     def __unicode__(self):
         return "system %s in map %s" % (self.system.name, self.map.name)
@@ -515,6 +516,54 @@ class MapSystem(models.Model):
             "Truncated to: %s (%s)" % (self.system.name, self.friendlyname),
             True)
 
+    def move_up(self):
+        """Switch display priority with the sibling above"""
+        if not self.parentsystem:
+            return
+
+        with transaction.atomic():
+            siblings = self.parentsystem.childsystems.order_by(
+                '-display_order_priority', '-pk')
+            i = siblings.count()
+            it = siblings.iterator()
+            while True:
+                try:
+                    mapsys = it.next()
+                    if self == mapsys:
+                        next_mapsys = it.next()
+                        next_mapsys.display_order_priority = i
+                        next_mapsys.save()
+                        i -= 1
+                except StopIteration:
+                    break
+                mapsys.display_order_priority = i
+                mapsys.save()
+                i -= 1
+
+    def move_down(self):
+        """Switch display priority with the sibling below"""
+        if not self.parentsystem:
+            return
+
+        with transaction.atomic():
+            siblings = self.parentsystem.childsystems.order_by(
+                'display_order_priority', 'pk')
+            i = 0
+            it = siblings.iterator()
+            while True:
+                try:
+                    mapsys = it.next()
+                    if self == mapsys:
+                        next_mapsys = it.next()
+                        next_mapsys.display_order_priority = i
+                        next_mapsys.save()
+                        i += 1
+                except StopIteration:
+                    break
+                mapsys.display_order_priority = i
+                mapsys.save()
+                i += 1
+
     def as_dict(self):
         """Returns a dict representation of the system."""
         try:
@@ -541,6 +590,12 @@ class MapSystem(models.Model):
             'children': [x.as_dict() for x in self.childsystems.all()],
         }
         return data
+
+    def has_siblings(self):
+        parent_sys = self.parentsystem
+        if parent_sys is None:
+            return False
+        return parent_sys.childsystems.count() > 1
 
 
 class Wormhole(models.Model):

@@ -156,12 +156,16 @@ function processAjax(data) {
 
 function doMapAjaxCheckin() {
     var currentPath = "update/";
-    $.ajax({
-        type: "POST",
-        url: currentPath,
-        data: {"loadtime": loadtime, "silent": silentSystem, 'kspace': kspaceIGBMapping},
-        success: processAjax
-    });
+    if (loadtime !== null) {
+        $.ajax({
+            type: "POST",
+            url: currentPath,
+            data: {"loadtime": loadtime, "silent": silentSystem, 'kspace': kspaceIGBMapping},
+            success: processAjax
+        });
+    } else {
+        console.log('Skipping checkin due to null loadtime value.');
+    }
 }
 
 function HideSystemDetails() {
@@ -1161,7 +1165,8 @@ function GetConnectionDash(system) {
     if (system.interestpath == true || system.interest == true) {
         return interestDash;
     }
-    return "none";
+    // Use blank space instead of none to work around issue with Firefox 37+
+    return " ";
 }
 
 function GetConnectionColor(system) {
@@ -1484,13 +1489,15 @@ function DrawWormholes(systemFrom, systemTo, textColor) {
         }
 
         if (systemTo.WhFromParent) {
-            var whFromText, whToText;
-            if (!renderWormholeTags) {
-                whFromText = ">";
-                whToText = "<";
+            var whFromText;
+            if (renderWormholeTags === true) {
+                if (systemTo.WhToParent === "K162" && systemTo.WhFromParent === "K162") {
+                    whFromText = "??? >";
+                } else {
+                    whFromText = systemTo.WhFromParent + " >";
+                }
             } else {
-                whFromText = systemTo.WhFromParent + " >";
-                whToText = "< " + systemTo.WhToParent;
+                whFromText = ">";
             }
 
             whFromSys = paper.text(whFromSysX, whFromSysY, whFromText);
@@ -1504,6 +1511,17 @@ function DrawWormholes(systemFrom, systemTo, textColor) {
         }
 
         if (systemTo.WhToParent) {
+            var whToText;
+            if (renderWormholeTags === true) {
+                if (systemTo.WhToParent === "K162" && systemTo.WhFromParent === "K162") {
+                    whToText = "< ???";
+                } else {
+                    whToText = "< " + systemTo.WhToParent;
+                }
+            } else {
+                whToText = "<";
+            }
+
             whToSys = paper.text(whToSysX, whToSysY, whToText);
             whToSys.attr({fill: whToColor, cursor: "pointer", "font-size": s(11), "font-weight": decoration});
 
@@ -1660,3 +1678,16 @@ function togglepilotlist() {
     }
     RefreshMap();
 }
+
+function MoveSystem(msID, action) {
+    var address = "system/" + msID + "/movesys/" + action + "/";
+    $.ajax({
+        url: address,
+        type: "POST",
+        success: function () {
+            DisplaySystemMenu(msID);
+            RefreshMap();
+        }
+    });
+}
+
